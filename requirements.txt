@@ -1,0 +1,9 @@
+langchain
+langchain-community
+langchain-huggingface
+huggingface_hub
+youtube-transcript-api
+faiss-cpu
+python-dotenv
+ipykernel
+-e .
