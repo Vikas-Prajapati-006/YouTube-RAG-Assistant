@@ -225,3 +225,8 @@ build/
 
 # Project Outputs
 artifacts/
+logs/
+
+# Temporary scripts
+app.py
+test.py
