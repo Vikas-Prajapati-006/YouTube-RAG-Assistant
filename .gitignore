@@ -228,5 +228,4 @@ artifacts/
 logs/
 
 # Temporary scripts
-app.py
 test.py

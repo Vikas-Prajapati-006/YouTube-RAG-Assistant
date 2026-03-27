@@ -1,64 +1,81 @@
 import os
 import sys
+import yt_dlp
+from dataclasses import dataclass
 from src.exception import CustomException
 from src.logger import logging
-from youtube_transcript_api import YouTubeTranscriptApi
-
-
-
-from dataclasses import dataclass
 
 @dataclass
 class DataIngestionConfig:
-    
+    # Final transcript file path
     raw_data_path: str = os.path.join('artifacts', "transcript.txt")
 
 class DataIngestion:
     def __init__(self):
         self.ingestion_config = DataIngestionConfig()
-        # Artifacts directory banana agar nahi hai toh
-        os.makedirs(os.path.dirname(self.ingestion_config.raw_data_path), exist_ok=True)
 
-    def extract_video_id(self, url):
-
+    def initiate_data_ingestion(self, youtube_url):
+        
+        logging.info("Starting Data Ingestion: Fetching YouTube Transcript via yt-dlp")
         try:
-            logging.info(f"Extracting Video ID from URL: {url}")
-            if "v=" in url:
-                return url.split("v=")[1].split("&")[0]
-            elif "be/" in url:
-                return url.split(".be/")[1].split("?")[0]
-            return url
-        except Exception as e:
-            raise CustomException(e, sys)
-
-    def initiate_data_ingestion(self, video_url):
-        logging.info("Entered the data ingestion method or component")
-        try:
-            video_id = self.extract_video_id(video_url)
-            logging.info(f"Fetching transcript for Video ID: {video_id}")
+           
+            os.makedirs(os.path.dirname(self.ingestion_config.raw_data_path), exist_ok=True)
 
             
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            
-            
-            try:
-                transcript = transcript_list.find_transcript(['hi', 'en'])
-            except:
-               
-                transcript = transcript_list.find_generated_transcript(['hi', 'en'])
+            ydl_opts = {
+                'skip_download': True,         
+                'writeautomaticsub': True,     
+                'subtitleslangs': ['hi', 'en'],
+                'outtmpl': os.path.join('artifacts', 'temp_subs'), 
+                'quiet': True,
+                'no_warnings': True
+            }
 
-            transcript_data = transcript.fetch()
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                logging.info(f"Downloading transcript for URL: {youtube_url}")
+                try:
+                    ydl.download([youtube_url])
+                except Exception as e:
+                    
+                    logging.warning(f"Partial error or 429 detected, checking for partial downloads: {str(e)}")
+
+           
+            artifacts_path = 'artifacts'
+            temp_file = None
+            
+           
+            all_files = os.listdir(artifacts_path)
             
             
-            full_text = " ".join([t['text'] for t in transcript_data])
+            priority_extensions = ['.hi.vtt', '.en.vtt', '.vtt', '.srt']
+            
+            for ext in priority_extensions:
+                for f in all_files:
+                    if f.startswith('temp_subs') and f.endswith(ext):
+                        temp_file = os.path.join(artifacts_path, f)
+                        break
+                if temp_file:
+                    break
+
+            if not temp_file:
+                raise Exception("Error: Subtitle file not found. Please check the Video's CC (Closed Captions).")
+
+            logging.info(f"Subtitle file found: {temp_file}. Converting to transcript.txt")
 
             
-            with open(self.ingestion_config.raw_data_path, "w", encoding="utf-8") as f:
-                f.write(full_text)
+            with open(temp_file, 'r', encoding='utf-8') as f:
+                content = f.read()
 
-            logging.info("Ingestion of the data is completed successfully")
+            with open(self.ingestion_config.raw_data_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+            
+            for f in os.listdir(artifacts_path):
+                if f.startswith('temp_subs'):
+                    os.remove(os.path.join(artifacts_path, f))
+
+            logging.info(f"Ingestion successful! Transcript saved: {self.ingestion_config.raw_data_path}")
             return self.ingestion_config.raw_data_path
 
         except Exception as e:
-            logging.error(f"Exception occurred at Data Ingestion stage: {str(e)}")
             raise CustomException(e, sys)
